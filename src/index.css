@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --color-primary: #1e5e7f;
+  --color-primary-light: #2c7da0;
+  --color-primary-bright: #439bc2;
+  --color-primary-dark: #14435b;
+  --color-primary-subtle: rgba(30, 94, 127, 0.16);
+  --color-primary-glow: rgba(30, 94, 127, 0.35);
+}
+
+/* Leaflet Custom Pin and Map Overrides */
+.leaflet-container {
+  font-family: inherit;
+  background-color: #080d14;
+}
+
+.custom-monument-icon,
+.custom-user-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-tile {
+  filter: contrast(1.08) brightness(0.92) saturate(1.05);
+}
+
+/* Custom sleek scrollbar with Almagora #1e5e7f theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090e15;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1b2838;
+  border-radius: 9999px;
+  border: 1px solid rgba(30, 94, 127, 0.3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #1e5e7f;
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  background: rgba(13, 21, 31, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(30, 94, 127, 0.22);
+}
+
+.glass-panel-elevated {
+  background: rgba(15, 25, 38, 0.94);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(30, 94, 127, 0.35);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7), 0 0 20px -5px rgba(30, 94, 127, 0.25);
+}

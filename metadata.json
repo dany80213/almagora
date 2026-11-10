@@ -1,0 +1,6 @@
+{
+  "name": "Cicerone AI - Guida Turistica Intelligente & Audio GPS",
+  "description": "Applicazione di guida turistica con intelligenza artificiale, navigazione GPS in tempo reale, connessione Bluetooth per cuffiette, narrazione contestuale vocale, percorsi offline e profilo multipiattaforma sincronizzato.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
