@@ -8,6 +8,15 @@ export interface Waypoint {
   stopoverMinutes: number;
   coverImage?: string;
   category?: 'monument' | 'fountain' | 'church' | 'square' | 'viewpoint' | 'secret';
+  /** Pre-recorded audio clips that replace the synthetic voice for this stop. */
+  recordedAudio?: {
+    narration: string;
+    narrationText: string;
+    secret?: string;
+    secretText?: string;
+    tip?: string;
+    tipText?: string;
+  };
 }
 
 export interface Tour {
@@ -18,6 +27,8 @@ export interface Tour {
   tagline: string;
   description: string;
   coverImage: string;
+  /** Recorded welcome message played before the first stop's narration. */
+  introAudio?: string;
   estimatedKm: number;
   estimatedMinutes: number;
   waypointsCount: number;

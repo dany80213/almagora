@@ -10,6 +10,7 @@ class SpeechService {
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private currentAudio: HTMLAudioElement | null = null;
   private currentPlaySession = 0; // Monotonic session ID to invalidate previous utterances
+  private currentAudioQueue: string[] = [];
 
   private isSpeakingInternal = false;
   private isPausedInternal = false;
@@ -125,6 +126,7 @@ class SpeechService {
     this.isSpeakingInternal = true;
     this.isPausedInternal = false;
     this.currentFullText = cleanText;
+    this.currentAudioQueue = [];
 
     const speed = options.speed || this.currentSpeed || 1.0;
     const persona = options.voicePersonaId || this.currentPersonaId || 'amico';
@@ -228,6 +230,93 @@ class SpeechService {
   }
 
   /**
+   * Plays one or more pre-recorded audio files back to back (e.g. tour intro + monument narration).
+   * Shares the same single-channel guarantee as playNarration: any previous audio stops first.
+   */
+  public playAudioFiles(
+    urls: string[],
+    options: {
+      speed?: number;
+      onEnd?: () => void;
+      onStart?: () => void;
+    } = {}
+  ): boolean {
+    const queue = urls.filter(Boolean);
+    if (queue.length === 0 || typeof window === 'undefined') return false;
+
+    const sessionId = ++this.currentPlaySession;
+    this.stopPlaybackInternal();
+
+    this.currentAudioQueue = queue;
+    this.currentFullText = '';
+    this.isSpeakingInternal = true;
+    this.isPausedInternal = false;
+    this.currentSpeed = options.speed || this.currentSpeed || 1.0;
+    this.elapsedSeconds = 0;
+    this.estimatedDuration = 1;
+
+    // Pre-read durations so the progress bar spans the whole playlist
+    const durations: number[] = queue.map(() => 0);
+    queue.forEach((url, i) => {
+      const probe = new Audio();
+      probe.preload = 'metadata';
+      probe.onloadedmetadata = () => {
+        if (this.currentPlaySession !== sessionId) return;
+        durations[i] = probe.duration || 0;
+        this.estimatedDuration = Math.max(1, durations.reduce((a, b) => a + b, 0));
+        this.onPlaybackProgress?.(this.elapsedSeconds, this.estimatedDuration);
+      };
+      probe.src = url;
+    });
+
+    const finish = () => {
+      if (this.currentPlaySession !== sessionId) return;
+      this.isSpeakingInternal = false;
+      this.currentAudio = null;
+      this.elapsedSeconds = this.estimatedDuration;
+      this.onPlaybackProgress?.(this.estimatedDuration, this.estimatedDuration);
+      options.onEnd?.();
+      this.onPlaybackEnd?.();
+      this.onStateChange?.(false);
+    };
+
+    const playIndex = (index: number) => {
+      if (this.currentPlaySession !== sessionId) return;
+      if (index >= queue.length) return finish();
+
+      const audio = new Audio(queue[index]);
+      audio.playbackRate = this.currentSpeed;
+      if (this.activeSinkId && 'setSinkId' in audio) {
+        (audio as any).setSinkId(this.activeSinkId).catch(() => {});
+      }
+      const offset = durations.slice(0, index).reduce((a, b) => a + b, 0);
+      audio.ontimeupdate = () => {
+        if (this.currentPlaySession !== sessionId) return;
+        this.elapsedSeconds = offset + audio.currentTime;
+        this.onPlaybackProgress?.(this.elapsedSeconds, this.estimatedDuration);
+      };
+      audio.onended = () => playIndex(index + 1);
+      audio.onerror = () => {
+        console.warn('Audio file failed to load:', queue[index]);
+        playIndex(index + 1);
+      };
+      this.currentAudio = audio;
+      audio.play().catch((err) => {
+        if (this.currentPlaySession !== sessionId) return;
+        console.warn('Audio playback blocked:', err);
+        this.isSpeakingInternal = false;
+        this.currentAudio = null;
+        this.onStateChange?.(false);
+      });
+    };
+
+    playIndex(0);
+    options.onStart?.();
+    this.onStateChange?.(true);
+    return true;
+  }
+
+  /**
    * Toggle Play / Stop cleanly:
    * - If already playing: INTERRUPTS immediately (stops all audio, zero residual sound)
    * - If stopped: starts audio once immediately with 0ms latency
@@ -258,7 +347,9 @@ class SpeechService {
   }
 
   public resume() {
-    if (this.currentFullText) {
+    if (this.currentAudioQueue.length > 0) {
+      this.playAudioFiles(this.currentAudioQueue, { speed: this.currentSpeed });
+    } else if (this.currentFullText) {
       this.playNarration(this.currentFullText, {
         speed: this.currentSpeed,
         voicePersonaId: this.currentPersonaId,
@@ -293,6 +384,9 @@ class SpeechService {
 
     if (this.currentAudio) {
       try {
+        this.currentAudio.ontimeupdate = null;
+        this.currentAudio.onended = null;
+        this.currentAudio.onerror = null;
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
       } catch {}
@@ -313,6 +407,12 @@ class SpeechService {
   }
 
   public skipSeconds(delta: number) {
+    if (this.currentAudio) {
+      const a = this.currentAudio;
+      const target = Math.max(0, Math.min(a.duration || 0, a.currentTime + delta));
+      a.currentTime = target;
+      return;
+    }
     const newTime = Math.max(0, Math.min(this.estimatedDuration, this.elapsedSeconds + delta));
     this.elapsedSeconds = newTime;
     if (this.onPlaybackProgress) {
@@ -331,6 +431,9 @@ class SpeechService {
     this.currentSpeed = speed;
     if (this.currentUtterance) {
       this.currentUtterance.rate = speed;
+    }
+    if (this.currentAudio) {
+      this.currentAudio.playbackRate = speed;
     }
   }
 

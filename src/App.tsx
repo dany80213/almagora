@@ -310,7 +310,50 @@ export default function App() {
     });
   };
 
+  // Tours whose recorded welcome message has already been played this session
+  const introPlayedRef = useRef<Set<string>>(new Set());
+
+  // Plays the recorded clips for the active stop, if any. Returns false when the stop has none.
+  const playRecordedNarration = (): boolean => {
+    const recorded = activeWaypoint?.recordedAudio;
+    if (!recorded) return false;
+    const queue: string[] = [];
+    const isFirstStop = activeTour.waypoints[0]?.id === activeWaypoint?.id;
+    if (isFirstStop && activeTour.introAudio && !introPlayedRef.current.has(activeTour.id)) {
+      introPlayedRef.current.add(activeTour.id);
+      queue.push(activeTour.introAudio);
+    }
+    queue.push(recorded.narration);
+    setIsPlaying(true);
+    speechService.playAudioFiles(queue, {
+      speed: playbackSpeed,
+      onStart: () => setIsPlaying(true),
+      onEnd: () => setIsPlaying(false),
+    });
+    return true;
+  };
+
+  const handlePlayClip = (url: string) => {
+    setIsPlaying(true);
+    speechService.playAudioFiles([url], {
+      speed: playbackSpeed,
+      onEnd: () => setIsPlaying(false),
+    });
+  };
+
+  // Recorded stops show the exact transcript of their audio instead of the generated text
+  const displayedNarration: MonumentNarration | null =
+    activeNarration && activeWaypoint?.recordedAudio
+      ? {
+          ...activeNarration,
+          spokenNarration: activeWaypoint.recordedAudio.narrationText,
+          secretDetails: activeWaypoint.recordedAudio.secretText || activeNarration.secretDetails,
+          insiderTip: activeWaypoint.recordedAudio.tipText || activeNarration.insiderTip,
+        }
+      : activeNarration;
+
   const handlePlayAudio = () => {
+    if (playRecordedNarration()) return;
     const narration =
       activeNarration ||
       (activeWaypoint ? createDefaultNarration(activeWaypoint, activeTour.city) : null);
@@ -342,6 +385,7 @@ export default function App() {
       setIsPlaying(false);
     } else {
       // User clicked while stopped: start single instance immediately in 0ms
+      if (playRecordedNarration()) return;
       setIsPlaying(true);
       speechService.playNarration(narration.spokenNarration, {
         speed: playbackSpeed,
@@ -906,9 +950,10 @@ export default function App() {
       {/* Persistent Audio Player Dock */}
       <AudioPlayerDock
         waypoint={activeWaypoint}
-        narration={activeNarration}
+        narration={displayedNarration}
         isPlaying={isPlaying}
         onTogglePlay={handleTogglePlay}
+        onPlayClip={handlePlayClip}
         onSkipBack15={handleSkipBack15}
         onSkipForward15={handleSkipForward15}
         onNextWaypoint={handleNextWaypoint}
